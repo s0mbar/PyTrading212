@@ -13,6 +13,7 @@ from ..security import require_access_token
 from ..services.trading212 import Trading212Client, Trading212Error
 from ..tax.csv_import import CsvFormatError, ParsedHistory, merge_histories, parse_trading212_csv
 from ..tax.exports import ReportNotReadyError, export_service
+from ..tax.fx import convert_history_to_eur
 from ..tax.report import TaxOptions, build_tax_report
 from ..tax.schemas import ExportRequest, TaxReportRequest, TaxReportResponse
 
@@ -46,25 +47,25 @@ async def compute_tax_report(request: TaxReportRequest) -> TaxReportResponse:
         except Trading212Error as exc:
             raise trading212_http_error(exc) from exc
 
+    try:
+        history = await run_in_threadpool(_parse_sources, sources)
+    except CsvFormatError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    history = await convert_history_to_eur(history)
+
     options = TaxOptions(
         year=request.year,
         prior_capital_losses=Decimal(str(request.prior_capital_losses)),
         default_treaty_rate=Decimal(str(request.default_treaty_rate)),
         category_overrides=request.category_overrides,
     )
-    try:
-        return await run_in_threadpool(_build_report, sources, options)
-    except CsvFormatError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-
-def _build_report(sources: list[tuple[str, str]], options: TaxOptions) -> TaxReportResponse:
-    histories: list[ParsedHistory] = [
-        parse_trading212_csv(content, source=name) for name, content in sources
-    ]
-    return build_tax_report(
-        merge_histories(histories), options, source_names=[name for name, _ in sources]
+    return await run_in_threadpool(
+        build_tax_report, history, options, source_names=[name for name, _ in sources]
     )
+
+
+def _parse_sources(sources: list[tuple[str, str]]) -> ParsedHistory:
+    return merge_histories(parse_trading212_csv(content, source=name) for name, content in sources)
 
 
 @router.get("/exports", response_model=ExportListResponse)

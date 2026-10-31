@@ -8,7 +8,7 @@ Rules applied (to be checked against the yearly notices 2042, 2042-C, 2047, 2074
 """
 
 import re
-from collections import Counter, defaultdict
+from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -416,14 +416,13 @@ def _warn_unhandled_events(transactions: list[Transaction], year: int, warnings:
 
 
 def _warn_currency(transactions: list[Transaction], warnings: list[str]) -> None:
-    currencies = Counter(t.total_currency for t in transactions if t.total_currency)
-    foreign = sorted(set(currencies) - {ACCOUNT_CURRENCY})
+    foreign = sorted({t.total_currency for t in transactions} - {ACCOUNT_CURRENCY, ""})
     if foreign:
         warnings.append(
-            "Montants exprimés en "
+            "Montants en "
             + ", ".join(foreign)
-            + " : le calcul suppose un compte en euros, "
-            "ces montants ne sont pas convertis."
+            + " non convertis en euros (cours BCE indisponible) : ils sont comptés tels quels, "
+            "corrigez-les manuellement."
         )
 
 
@@ -538,7 +537,7 @@ def _income_by_country(
 
 
 def _foreign_account(transactions: list[Transaction]) -> ForeignAccount:
-    currencies = sorted({t.total_currency for t in transactions if t.total_currency})
+    currencies = sorted({t.original_currency or t.total_currency for t in transactions} - {""})
     return ForeignAccount(
         entity=BROKER_ENTITY,
         entity_country=BROKER_COUNTRY_LABEL,

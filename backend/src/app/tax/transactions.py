@@ -39,6 +39,7 @@ class Transaction:
     broker_result: Decimal | None
     transaction_id: str
     source: str
+    original_currency: str = ""
 
     @property
     def instrument_key(self) -> str:
