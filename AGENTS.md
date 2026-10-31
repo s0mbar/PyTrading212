@@ -60,15 +60,34 @@ required
 
 ## 📁 Project Structure
 
-. ├── .env ├── README.md ├── AGENTS.md ├── docker/ ├── frontend/ ├──
-backend/ ├── tests/ ├── logs/ └── deploy/
+.
+├── .env
+├── README.md
+├── AGENTS.md
+├── docker/
+├── frontend/
+├── backend/
+├── tests/
+├── logs/
+└── deploy/
 
 ------------------------------------------------------------------------
 
 ## 🎯 Code Quality
 
--   KISS, DRY, YAGNI
--   Readability first
+- Apply Clean Code principles:
+  - KISS: implement the simplest solution that works.
+  - DRY: avoid duplication; reuse focused functions.
+  - YAGNI: build only what is needed now.
+  - Readability first: explicit names for variables, functions, and modules.
+- Apply SOLID where relevant:
+  - SRP: one responsibility per function/class.
+  - OCP: extend behavior without risky edits to stable code.
+  - LSP: subtype behavior must remain substitutable.
+  - ISP: prefer narrow, focused interfaces.
+  - DIP: business logic depends on abstractions, not concrete implementations.
+- Prefer composition over inheritance when it improves clarity.
+- Keep functions short, cohesive, and testable.
 
 Python: - Type hints required - Use pydantic - Use ruff
 
@@ -76,7 +95,17 @@ React: - TypeScript required - Functional components
 
 ------------------------------------------------------------------------
 
-## ✅ Quality Gates
+## ✅ Test & Quality Gates
+
+- Prefer TDD when implementing new behavior:
+  - Red: write a failing test.
+  - Green: write minimal code to pass.
+  - Refactor: improve code while tests stay green.
+- Use AAA test structure:
+  - Arrange
+  - Act
+  - Assert
+- Add regression tests for bug fixes.
 
 Python: ruff format . ruff check --fix . pytest
 

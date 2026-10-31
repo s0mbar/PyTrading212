@@ -1,0 +1,32 @@
+# Secrets: only the template is versioned
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+*.pyc
+*.pyo
+*.pyd
+
+# Frontend
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Runtime artefacts
+logs/
+*.log
+*.csv
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
