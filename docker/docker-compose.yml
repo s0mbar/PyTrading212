@@ -1,3 +1,5 @@
+name: pytrading212
+
 services:
   backend:
     build:
@@ -5,14 +7,33 @@ services:
       dockerfile: docker/backend.Dockerfile
     env_file:
       - ../.env
-    ports:
-      - "8000:8000"
+    # Not published on the host: only reachable through the frontend proxy.
+    expose:
+      - "8000"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
 
   frontend:
     build:
       context: ..
       dockerfile: docker/frontend.Dockerfile
     ports:
-      - "5173:80"
+      # Loopback only: the console can place real orders.
+      - "127.0.0.1:5173:8080"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true

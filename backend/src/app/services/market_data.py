@@ -1,9 +1,11 @@
-﻿"""Open market-data service with resilient caching and rate-limit fallback."""
+"""Open market-data service with resilient caching and rate-limit fallback."""
 
 import asyncio
+import re
 from datetime import UTC, datetime
 from time import monotonic
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -24,8 +26,23 @@ class MarketDataNotFoundError(MarketDataError):
 _history_cache: dict[str, tuple[float, float, list[dict[str, Any]]]] = {}
 
 
+ALLOWED_INTERVALS = frozenset(
+    {"1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h", "1d", "1wk", "1mo"}
+)
+ALLOWED_RANGES = frozenset({"1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max"})
+
+# Trading 212 marks European listings with a lowercase letter before "_EQ" (e.g. "SIGTl_EQ").
+_EXCHANGE_LETTER_TO_YAHOO_SUFFIX = {"l": ".L", "d": ".DE", "p": ".PA"}
+_EXCHANGE_LETTER_TICKER = re.compile(r"^([A-Z0-9.]+)([a-z])_EQ$")
+
+
 def trading212_to_yahoo_symbol(ticker: str) -> str:
-    symbol = ticker.strip().upper()
+    raw = ticker.strip()
+    match = _EXCHANGE_LETTER_TICKER.match(raw)
+    if match and match.group(2) in _EXCHANGE_LETTER_TO_YAHOO_SUFFIX:
+        return match.group(1) + _EXCHANGE_LETTER_TO_YAHOO_SUFFIX[match.group(2)]
+
+    symbol = raw.upper()
 
     if symbol.endswith("_US_EQ"):
         return symbol.replace("_US_EQ", "")
@@ -53,7 +70,9 @@ def _cache_ttl_for_interval(interval: str) -> float:
     return 900.0
 
 
-def get_cached_history(*, ticker: str, interval: str = "1h", range_value: str = "3mo") -> list[dict[str, Any]] | None:
+def get_cached_history(
+    *, ticker: str, interval: str = "1h", range_value: str = "3mo"
+) -> list[dict[str, Any]] | None:
     symbol = trading212_to_yahoo_symbol(ticker)
     cache_key = f"{symbol}|{interval}|{range_value}"
     cached = _history_cache.get(cache_key)
@@ -87,9 +106,10 @@ async def fetch_history(
     }
 
     # Query both Yahoo hosts to reduce transient host-level throttling.
+    encoded_symbol = quote(symbol, safe="")
     urls = [
-        f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
-        f"https://query2.finance.yahoo.com/v8/finance/chart/{symbol}",
+        f"https://query1.finance.yahoo.com/v8/finance/chart/{encoded_symbol}",
+        f"https://query2.finance.yahoo.com/v8/finance/chart/{encoded_symbol}",
     ]
 
     last_error: Exception | None = None
@@ -101,7 +121,8 @@ async def fetch_history(
 
                 if response.status_code == 429:
                     last_error = MarketDataRateLimitError(
-                        f"Yahoo market data rate-limited ticker={symbol} interval={interval} range={range_value}"
+                        f"Yahoo market data rate-limited ticker={symbol} "
+                        f"interval={interval} range={range_value}"
                     )
                     await asyncio.sleep(min(0.2 * attempt, 0.5))
                     continue

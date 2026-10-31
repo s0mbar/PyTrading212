@@ -1,4 +1,6 @@
-﻿const API_BASE = "/api/trading212";
+import { requestJson } from "./http";
+
+const API_BASE = "/api/trading212";
 
 export type BotMode = "DRY_RUN" | "LIVE";
 export type OrderType = "MARKET" | "LIMIT" | "STOP" | "STOP_LIMIT";
@@ -110,30 +112,13 @@ export type BotStatus = {
   recent_decisions: BotDecision[];
 };
 
-function extractErrorMessage(payload: unknown, status: number): string {
-  if (payload && typeof payload === "object" && "detail" in payload) {
-    const detail = (payload as { detail?: unknown }).detail;
-    if (typeof detail === "string" && detail.length > 0) {
-      return detail;
-    }
-  }
+export type HealthStatus = {
+  status: string;
+  auth_required: boolean;
+};
 
-  if (status === 429) {
-    return "Trading 212 limite temporairement les requetes (429).";
-  }
-
-  return `Backend request failed (HTTP ${status})`;
-}
-
-async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, init);
-  const payload = (await response.json().catch(() => null)) as unknown;
-
-  if (!response.ok) {
-    throw new Error(extractErrorMessage(payload, response.status));
-  }
-
-  return payload as T;
+export async function fetchHealth(): Promise<HealthStatus> {
+  return requestJson<HealthStatus>("/api/health");
 }
 
 export async function fetchOverview(): Promise<TradingOverview> {
@@ -143,7 +128,6 @@ export async function fetchOverview(): Promise<TradingOverview> {
 export async function placeOrder(payload: PlaceOrderRequest): Promise<OrderExecutionResponse> {
   return requestJson<OrderExecutionResponse>(`${API_BASE}/orders`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
 }
@@ -155,7 +139,6 @@ export async function fetchBotStatus(): Promise<BotStatus> {
 export async function updateBotConfig(config: BotConfig): Promise<BotStatus> {
   return requestJson<BotStatus>(`${API_BASE}/bot/config`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(config),
   });
 }

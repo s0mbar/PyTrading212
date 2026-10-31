@@ -1,47 +1,56 @@
-﻿"""Schemas API and bot."""
+"""Schemas API and bot."""
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
+from typing import Annotated
 
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+# Trading 212 tickers are case-sensitive: European listings use a lowercase exchange letter
+# (e.g. "SIGTl_EQ" for London), so they must never be upper-cased.
+TICKER_PATTERN = r"^[A-Za-z0-9._-]+$"
+
+Ticker = Annotated[str, Field(min_length=1, max_length=40, pattern=TICKER_PATTERN)]
+FinitePositive = Annotated[float, Field(gt=0, allow_inf_nan=False)]
 
 
 class HealthResponse(BaseModel):
     status: str
+    auth_required: bool
 
 
-class BotMode(str, Enum):
+class BotMode(StrEnum):
     dry_run = "DRY_RUN"
     live = "LIVE"
 
 
-class OrderType(str, Enum):
+class OrderType(StrEnum):
     market = "MARKET"
     limit = "LIMIT"
     stop = "STOP"
     stop_limit = "STOP_LIMIT"
 
 
-class TimeValidity(str, Enum):
+class TimeValidity(StrEnum):
     day = "DAY"
     good_till_cancel = "GOOD_TILL_CANCEL"
 
 
 class PlaceOrderRequest(BaseModel):
-    ticker: str = Field(min_length=3, max_length=40)
-    quantity: float
+    ticker: Ticker
+    quantity: float = Field(allow_inf_nan=False)
     order_type: OrderType = OrderType.market
-    limit_price: float | None = Field(default=None, gt=0)
-    stop_price: float | None = Field(default=None, gt=0)
+    limit_price: FinitePositive | None = None
+    stop_price: FinitePositive | None = None
     time_validity: TimeValidity = TimeValidity.day
     extended_hours: bool = False
     confirm_live: bool = False
     note: str | None = Field(default=None, max_length=120)
 
-    @field_validator("ticker")
+    @field_validator("ticker", mode="before")
     @classmethod
-    def normalize_ticker(cls, value: str) -> str:
-        return value.strip().upper()
+    def strip_ticker(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
 
     @model_validator(mode="after")
     def validate_by_order_type(self) -> "PlaceOrderRequest":
@@ -54,9 +63,10 @@ class PlaceOrderRequest(BaseModel):
         if self.order_type == OrderType.stop and self.stop_price is None:
             raise ValueError("stop_price is required for STOP orders")
 
-        if self.order_type == OrderType.stop_limit:
-            if self.stop_price is None or self.limit_price is None:
-                raise ValueError("stop_price and limit_price are required for STOP_LIMIT orders")
+        if self.order_type == OrderType.stop_limit and (
+            self.stop_price is None or self.limit_price is None
+        ):
+            raise ValueError("stop_price and limit_price are required for STOP_LIMIT orders")
 
         return self
 
@@ -64,7 +74,7 @@ class PlaceOrderRequest(BaseModel):
 class BotConfig(BaseModel):
     enabled: bool = False
     mode: BotMode = BotMode.dry_run
-    tickers: list[str] = Field(default_factory=list)
+    tickers: list[Ticker] = Field(default_factory=list)
 
     allocated_cash_amount: float = Field(default=500.0, ge=20.0, le=1_000_000.0)
     min_trade_notional: float = Field(default=20.0, ge=5.0, le=100000.0)
@@ -104,12 +114,14 @@ class BotConfig(BaseModel):
     max_daily_drawdown_pct: float = Field(default=5.0, ge=0.5, le=30.0)
     max_weekly_drawdown_pct: float = Field(default=10.0, ge=1.0, le=50.0)
 
-    @field_validator("tickers")
+    @field_validator("tickers", mode="before")
     @classmethod
-    def normalize_tickers(cls, tickers: list[str]) -> list[str]:
-        normalized = []
+    def normalize_tickers(cls, tickers: object) -> object:
+        if not isinstance(tickers, list):
+            return tickers
+        normalized: list[object] = []
         for ticker in tickers:
-            item = ticker.strip().upper()
+            item = ticker.strip() if isinstance(ticker, str) else ticker
             if item and item not in normalized:
                 normalized.append(item)
         return normalized

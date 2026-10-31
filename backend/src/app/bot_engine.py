@@ -1,4 +1,4 @@
-﻿"""Algorithmic bot engine with 3-layer architecture.
+"""Algorithmic bot engine with 3-layer architecture.
 
 Layers:
 1) Market regime detection
@@ -7,6 +7,7 @@ Layers:
 """
 
 import asyncio
+import contextlib
 import math
 from collections import deque
 from datetime import UTC, date, datetime
@@ -30,6 +31,8 @@ from .services.trading212 import Trading212Client, Trading212Error
 class TradingBotEngine:
     def __init__(self) -> None:
         self._lock = asyncio.Lock()
+        # Serialises cycles: the background loop and a manual run must never trade concurrently.
+        self._cycle_lock = asyncio.Lock()
         self._config = BotConfig(poll_interval_seconds=settings.bot_default_poll_interval_seconds)
         self._running = False
         self._loop_task: asyncio.Task[None] | None = None
@@ -62,10 +65,8 @@ class TradingBotEngine:
             self._running = False
             if self._loop_task is not None:
                 self._loop_task.cancel()
-                try:
+                with contextlib.suppress(asyncio.CancelledError):
                     await self._loop_task
-                except asyncio.CancelledError:
-                    pass
                 self._loop_task = None
 
     async def _run_loop(self) -> None:
@@ -111,6 +112,10 @@ class TradingBotEngine:
         )
 
     async def run_cycle(self) -> BotStatus:
+        async with self._cycle_lock:
+            return await self._run_cycle_unlocked()
+
+    async def _run_cycle_unlocked(self) -> BotStatus:
         config = self._config
         self._rotate_daily_counter()
 
@@ -161,7 +166,7 @@ class TradingBotEngine:
 
             free_cash = float(cash.get("free", 0.0) or 0.0)
             positions_by_ticker = {
-                str((position.get("instrument") or {}).get("ticker", "")).upper(): position
+                str((position.get("instrument") or {}).get("ticker", "")): position
                 for position in positions
             }
 
@@ -363,7 +368,10 @@ class TradingBotEngine:
             action=signal_action,
         )
 
-        if config.signal_filter_enabled and signal_probability < config.signal_probability_threshold:
+        if (
+            config.signal_filter_enabled
+            and signal_probability < config.signal_probability_threshold
+        ):
             return (
                 BotDecision(
                     at=now,
@@ -543,7 +551,9 @@ class TradingBotEngine:
             stop_price = _stop_price_for_action(price, action, config.stop_price_offset_pct)
         elif order_type == OrderType.stop_limit:
             stop_price = _stop_price_for_action(price, action, config.stop_price_offset_pct)
-            limit_price = _limit_price_for_stop_limit(stop_price, action, config.limit_price_offset_pct)
+            limit_price = _limit_price_for_stop_limit(
+                stop_price, action, config.limit_price_offset_pct
+            )
 
         if mode == BotMode.dry_run:
             if action == "BUY":
@@ -580,7 +590,9 @@ class TradingBotEngine:
             )
 
             self._daily_trades += 1
-            self._set_cooldown(ticker=ticker, was_loss=reason.lower().startswith("protective"), config=config)
+            self._set_cooldown(
+                ticker=ticker, was_loss=reason.lower().startswith("protective"), config=config
+            )
 
             if action == "BUY":
                 self._protection_levels[ticker] = (stop_loss, take_profit)
@@ -627,7 +639,9 @@ class TradingBotEngine:
             )
 
     def _set_cooldown(self, *, ticker: str, was_loss: bool, config: BotConfig) -> None:
-        delay = config.cooldown_after_loss_seconds if was_loss else config.cooldown_after_win_seconds
+        delay = (
+            config.cooldown_after_loss_seconds if was_loss else config.cooldown_after_win_seconds
+        )
         self._cooldown_until[ticker] = monotonic() + max(delay, 0)
 
     def _is_ticker_cooldown_active(self, ticker: str) -> bool:
@@ -661,7 +675,9 @@ class TradingBotEngine:
             return False
 
         daily_dd = ((account_total - self._daily_anchor_total) / self._daily_anchor_total) * 100.0
-        weekly_dd = ((account_total - self._weekly_anchor_total) / self._weekly_anchor_total) * 100.0
+        weekly_dd = (
+            (account_total - self._weekly_anchor_total) / self._weekly_anchor_total
+        ) * 100.0
 
         return (
             daily_dd <= -self._config.max_daily_drawdown_pct
@@ -706,7 +722,9 @@ def _compute_atr(highs: list[float], lows: list[float], closes: list[float], per
     return max(mean(recent), closes[-1] * 0.001)
 
 
-def _detect_regime(*, closes: list[float], atr: float, short_now: float, long_now: float) -> tuple[str, float]:
+def _detect_regime(
+    *, closes: list[float], atr: float, short_now: float, long_now: float
+) -> tuple[str, float]:
     price = closes[-1]
     slope_pct = ((short_now - long_now) / long_now) * 100.0 if long_now else 0.0
     atr_pct = (atr / price) * 100.0 if price else 0.0
@@ -840,4 +858,3 @@ def _position_notional(position: dict[str, Any] | None) -> float:
     if quantity <= 0:
         return 0.0
     return quantity * (current_price if current_price > 0 else average_price)
-
