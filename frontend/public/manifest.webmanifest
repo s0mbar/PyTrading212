@@ -1,0 +1,17 @@
+{
+  "name": "PyTrading",
+  "short_name": "PyTrading",
+  "description": "Console Trading 212, bot et aide à la déclaration fiscale",
+  "lang": "fr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a3fc2",
+  "theme_color": "#1e7bff",
+  "icons": [
+    { "src": "/icons/pytrading-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/pytrading-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/pytrading-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

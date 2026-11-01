@@ -141,14 +141,16 @@ export type AccountInfo = {
 };
 
 export async function computeTaxReport(payload: TaxReportRequest): Promise<TaxReport> {
-  return requestJson<TaxReport>(`${TAX_BASE}/report`, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+  // Parsing several years of history server-side can take a while.
+  return requestJson<TaxReport>(
+    `${TAX_BASE}/report`,
+    { method: "POST", body: JSON.stringify(payload) },
+    { timeoutMs: 180_000 }
+  );
 }
 
-export async function listExports(): Promise<ExportList> {
-  return requestJson<ExportList>(`${TAX_BASE}/exports`);
+export async function listExports(silent = false): Promise<ExportList> {
+  return requestJson<ExportList>(`${TAX_BASE}/exports`, {}, { silent });
 }
 
 export async function requestExport(year: number): Promise<{ report_id: number }> {

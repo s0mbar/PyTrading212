@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import type { DividendBox, TaxReport } from "../../api/tax";
 import { downloadCsv, frenchDecimal } from "../../lib/csv";
 import { formatDate, formatMoney, formatNumber, signClass } from "../../lib/format";
+import { Button } from "../../ui/controls";
 
 type TaxDetailsProps = {
   report: TaxReport;
@@ -79,9 +80,9 @@ function TaxDetails({ report, onOverrideChange }: TaxDetailsProps) {
         <div className="card-header">
           <h2>Cessions — détail pour le formulaire 2074 ({report.disposals.length})</h2>
           {report.disposals.length > 0 && (
-            <button type="button" className="secondary no-print" onClick={exportDisposals}>
+            <Button variant="secondary" className="no-print" onClick={exportDisposals}>
               Exporter en CSV
-            </button>
+            </Button>
           )}
         </div>
         <p className="meta">

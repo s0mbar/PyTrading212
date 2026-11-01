@@ -1,4 +1,4 @@
-import { requestJson } from "./http";
+import { requestJson, type RequestOptions } from "./http";
 
 const API_BASE = "/api/trading212";
 
@@ -6,9 +6,18 @@ export type BotMode = "DRY_RUN" | "LIVE";
 export type OrderType = "MARKET" | "LIMIT" | "STOP" | "STOP_LIMIT";
 export type TimeValidity = "DAY" | "GOOD_TILL_CANCEL";
 
+export type Position = {
+  instrument?: { ticker?: string; name?: string; isin?: string; currency?: string };
+  quantity?: number;
+  quantityAvailableForTrading?: number;
+  currentPrice?: number;
+  averagePricePaid?: number;
+  walletImpact?: { currency?: string; totalCost?: number; currentValue?: number; unrealizedProfitLoss?: number };
+};
+
 export type TradingOverview = {
   cash: Record<string, unknown>;
-  portfolio: { data?: unknown[] };
+  portfolio: { data?: Position[] };
   fetchedAt?: string;
   cached?: boolean;
   warning?: string;
@@ -118,11 +127,11 @@ export type HealthStatus = {
 };
 
 export async function fetchHealth(): Promise<HealthStatus> {
-  return requestJson<HealthStatus>("/api/health");
+  return requestJson<HealthStatus>("/api/health", {}, { silent: true, timeoutMs: 10_000 });
 }
 
-export async function fetchOverview(): Promise<TradingOverview> {
-  return requestJson<TradingOverview>(`${API_BASE}/overview`);
+export async function fetchOverview(options?: RequestOptions): Promise<TradingOverview> {
+  return requestJson<TradingOverview>(`${API_BASE}/overview`, {}, options);
 }
 
 export async function placeOrder(payload: PlaceOrderRequest): Promise<OrderExecutionResponse> {
@@ -132,8 +141,8 @@ export async function placeOrder(payload: PlaceOrderRequest): Promise<OrderExecu
   });
 }
 
-export async function fetchBotStatus(): Promise<BotStatus> {
-  return requestJson<BotStatus>(`${API_BASE}/bot/status`);
+export async function fetchBotStatus(options?: RequestOptions): Promise<BotStatus> {
+  return requestJson<BotStatus>(`${API_BASE}/bot/status`, {}, options);
 }
 
 export async function updateBotConfig(config: BotConfig): Promise<BotStatus> {
@@ -144,7 +153,5 @@ export async function updateBotConfig(config: BotConfig): Promise<BotStatus> {
 }
 
 export async function runBotOnce(): Promise<BotStatus> {
-  return requestJson<BotStatus>(`${API_BASE}/bot/run`, {
-    method: "POST",
-  });
+  return requestJson<BotStatus>(`${API_BASE}/bot/run`, { method: "POST" }, { timeoutMs: 120_000 });
 }
